@@ -1,0 +1,77 @@
+---
+output:
+  word_document: default
+  html_document: default
+---
+# Module 1 Assignment 3
+## May 15th, 2020
+### Stephen Kiser
+
+```{r Loading in tidyverse}
+#install.packages tidyverse
+
+library(tidyverse)
+
+```
+
+```{r Task 2 & 3}
+diamonddata <- diamonds
+
+diamonddata
+
+ggplot(diamonddata, aes(carat, price))+
+  geom_point()
+```
+
+The relation that carat and price is if the carat is larger than the price for the diamond is more.  As you can see the majority of diamonds that are less than 1 carat are less than $5000.  Then you once you hit more than 1 carat you see the increase in price grow exponentially.  There are some other factors that determine the prices of diamonds.  
+
+
+```{r Task 4}
+ggplot(diamonddata, aes(carat, price, color = cut))+
+  geom_point()
+```
+
+We see in this graph the same relationship between carat and price we described in the previous task.  However, this time we added the cut of the diamond to see if this had a factor in the price of the diamond.  We see that if the diamond was the ideal cut then the price of the diamond would be high.  For the most part of the diamonds that had a fair cut were lower priced than the other cuts.
+
+
+```{r Task 5}
+ggplot(diamonddata, aes(carat, price, color = cut))+
+  geom_point()+
+  facet_wrap("color")
+```
+
+We see there are seven different colors of diamonds in this data set.  Once again carrying on from the previous statements we see that price and carat size of diamonds saw an increasing trend.  We see that the colors D, E,and G did not go over 3 carat size.  These colors still sold over $15,000 however they did not get any bigger than 3 carat size.  Colors F, H, I, and J went over 4 carat size. Color J was the only diamond color that went over 5 carat size. 
+
+```{r Task 6}
+Inventory <- read_csv("InventoryData.csv")
+view(Inventory)
+summary(Inventory)
+```
+
+```{r Task 7}
+inventoryA <- Inventory %>%
+  filter(Supplier== "A")
+
+view(inventoryA)
+
+```
+
+There are 3695 rows in the new data frame, inventoryA.
+
+```{r Task 8}
+inventoryA = mutate(inventoryA, OnHandRatio = `On Hand` / `Annual Demand`)
+
+```
+
+This code makes a new column called, "OnHandRatio" which calculates the "ON Hand" column divided by the "Annual Demand" colum for each row.
+
+```{r Task 9}
+avg_cost <- inventoryA %>%
+  group_by(`Item SKU`)%>%
+  summarize(SKUAvgCost = mean(`Cost per Unit ($)`))
+view(avg_cost)
+summary(avg_cost)
+```
+
+### Task 10
+The most challenging topics and concepts was making of the avg_cost dataframe.  I had an idea of how to do it, but no good way to do it.  I also did not remember how to do the "facet_wrap" command.

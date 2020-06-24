@@ -1,0 +1,93 @@
+---
+output:
+  word_document: default
+  html_document: default
+---
+# Random Forests
+## June 5th, 2020
+### Stephen Kiser
+
+Libraries
+```{r libraries}
+library(tidyverse)
+library(caret)
+library(ranger)
+```
+
+Read-in Dataset
+```{r Dataset}
+blood <- read_csv("Blood.csv")
+```
+
+Changing variables
+```{r changing variables}
+blood <- blood %>% mutate(DonatedMarch = as.factor(DonatedMarch)) %>% mutate(DonatedMarch = fct_recode(DonatedMarch, 
+       "No" = "0",
+       "Yes" = "1"))
+glimpse(blood)
+
+summary(blood)
+```
+
+Training/Testing Sets
+```{r Training/Testing sets}
+set.seed(1234)
+train.rows.blood <- createDataPartition(y=blood$DonatedMarch, p=0.7, list = FALSE)
+
+train_blood <- slice(blood, train.rows.blood)
+test_blood <- slice(blood, - train.rows.blood)
+
+summary(train_blood)
+str(train_blood)
+```
+
+### Task 2
+```{r Task 2}
+fit_control = trainControl(method = "cv", number=10)
+
+set.seed(123)
+rf_fit = train(x=as.matrix(train_blood[,-5]), y=as.matrix(train_blood$DonatedMarch),
+               method = "ranger",
+               importance = "permutation",
+               trControl = fit_control,
+               num.trees = 100)
+```
+
+### Task 3
+```{r Task 3}
+varImp(rf_fit)
+rf_fit
+```
+
+The most important variable in the model is TotalDonations, and the least important variable is Mnths_Since_Last.
+
+
+### Task 4
+```{r Task 4}
+predRF = predict(rf_fit)
+head(predRF)
+```
+
+### Task 5
+```{r Task 5}
+confusionMatrix(predRF, train_blood$DonatedMarch, positive = "Yes")
+```
+
+The accuracy of the model is 90.27%.  The sensitivity of the model is 0.6560 and the specificity is 0.9799. 
+
+### Task 6
+
+The naive accuracy is 76.15% while the data set we created was 90.27%.  This is a 14.12 percent difference in accuracy. The model's accuracy is much better than the naive model's accuracy.
+
+### Task 7
+```{r Task 7}
+predRF_test = predict(rf_fit, newdata = test_blood)
+
+confusionMatrix(predRF_test, test_blood$DonatedMarch, positive = "Yes")
+```
+
+This new Confusion Matrix on the test dataset is worse than our training confusion matrix.  The accuracy of the test data is 76.79% while our accuracy for the training data was 90.27%.  This means that the test dataset has more wrong predictions then the training dataset.
+
+### Task 8 
+
+This model might be used in the real world to find out how many people would donate blood in the next month.  We could use the data that was collected for March, and see if we could enter in new donations to our model to predict how many people will donate in the following month.  We would have to update this model every month to keep it up to date.  I would recommend it because there is a 90.27% accuracy in predicting those who would donate.  My concern is that we would have to update this model every month because the new data, and those who donated in March might not donate for several months.  They might wait a couple of months in between donations because they have just recently donated blood.

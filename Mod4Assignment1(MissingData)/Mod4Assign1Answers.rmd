@@ -1,0 +1,73 @@
+---
+output:
+  word_document: default
+  html_document: default
+---
+# Missing Data
+## June 1st, 2020
+### Stephen Kiser
+
+```{r Libraries}
+library(tidyverse)
+library(mice)
+library(VIM)
+```
+
+```{r Reading in Dataset}
+grades <- read_csv("class-grades.csv")
+```
+
+### Task 1
+```{r Task 1}
+str(grades)
+summary(grades)
+```
+
+There is 11 grades missing in total for this whole dataset.  There is just one tutorial grade missing, 3 midterm exam grades, 3 takehome exam grades, and 4 final exam grades.    
+
+### Task 2
+```{r VIM plot}
+vim_plot = aggr(grades, numbers = TRUE, prop = c(TRUE, FALSE), cex.axis =.7)
+```
+
+There are 4 grades missing the just the final exam grade.  Then there are 2 missing grades for the takehome exam and there is also 2 missing grades for midterm grades.  Then there is one tutorial grade missing and a combination of midterm and takehome exam grade missing.  There is only one student missing multiple grades.
+
+### Task 3
+```{r row-wise deletion}
+grades_row <- grades %>% drop_na(c(Tutorial, Midterm, TakeHome, Final))
+
+str(grades_row)
+summary(grades_row)
+```
+
+After doing a row-wise deletion of missing values there are 89 rows left from the original 99.  
+
+### Task 4
+```{r column-wise deletion}
+grades_col <- grades %>% select(-c(Final, Midterm, TakeHome,Tutorial))
+
+str(grades_col)
+summary(grades_col)
+
+```
+
+After doing the column-wise deletion only 2 columns were left in the dataset.  These two columns were Prefix and Assignment grades.  It kept the 99 observations.
+
+### Task 5
+After doing both the row-wise deletion and the column-wise deletion the most preferable to get rid of missing values is row-wise deletion.  Even though we lost 10 observations with the row-wise deletion method we kept all 6 columns which is what we want to calculate in this engineering program.  We want to be able to calculate the grades of students.  The column-wise deletion method gets ride of to much of the data we are trying to calculate.
+
+### Task 6
+```{r mice}
+grades_imp = mice(grades, m=1, method = "pmm", seed = 12345)
+#in line above: m=1 -> runs one imputation, seed sets the random number seed to get repeatable results
+summary(grades_imp)
+densityplot(grades_imp)
+#red imputed, blue original, only shows density plots when more than 1 value the variable was imputed
+#note that the density plots are fairly uninteresting given the small amount of missing data
+grades_complete = complete(grades_imp)
+summary(grades_complete)
+
+```
+
+### Task 7
+The red graph is what is imputated for our grades by the mice function.  It takes from our dataset to imputate these data values.  As we see the midterm graph drastically changes with imputation.  The second peak rises much higher than what our original graph gives us, and this could cause errors in our calculations.  The final exam grade also has this issue but in the lower half of the grades.  this could cause our average exam score to be lower than what it actually is.  A time when imputation may not be advisable is when there is a lot of data missing.

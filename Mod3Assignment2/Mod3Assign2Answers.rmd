@@ -1,0 +1,279 @@
+---
+output:
+  word_document: default
+  html_document: default
+---
+# Logistic Regression (Classification)
+## May 28th, 2020
+### Stephen Kiser
+
+Libraries
+```{r libraries}
+library(tidyverse)
+library(MASS)
+library(caret)
+library(ROCR)
+```
+Reading in dataset
+```{r reading in dataset}
+parole <- read_csv("parole.csv")
+```
+```{r Mutating variables}
+parole <- parole %>% mutate(male = as.factor(male)) %>% mutate(male = fct_recode(male, 
+       "female" = "0",
+       "male" = "1"))
+
+parole <- parole %>% 
+  mutate(race = as.factor(race)) %>% mutate(race = fct_recode(race, 
+       "white" = "1",
+       "Other" = "2"))
+
+parole <- parole %>%
+  mutate(state = as.factor(state)) %>% mutate(state = fct_recode(state,
+      "Other" = "1",                                                            
+      "Kentucky" = "2",
+      "Louisiana" = "3",
+      "Virginia" = "4"
+      ))
+
+parole <- parole %>%
+  mutate(crime = as.factor(crime)) %>% mutate(crime = fct_recode(crime, 
+      "Other" = "1",
+      "Larceny" = "2",
+      "Drug-related" = "3",
+      "Driving-related" = "4"))
+
+parole <- parole %>%
+  mutate(multiple.offenses = as.factor(multiple.offenses)) %>%
+  mutate(multiple.offenses = fct_recode(multiple.offenses,
+      "No" = "0",
+      "Yes" = "1"))
+
+parole <- parole %>%
+  mutate(violator = as.factor(violator)) %>%
+  mutate(violator = fct_recode(violator,
+      "Didnt Violate Parole" = "0",
+      "Violated Parole" = "1"))
+str(parole)
+glimpse(parole)
+```
+
+### Task 1
+```{r}
+set.seed(12345)
+train.rows = createDataPartition(y = parole$violator, p=0.7, list = FALSE)
+train = slice(parole, train.rows)
+test = slice(parole, -train.rows)
+```
+
+### Task 2
+
+```{r}
+ggplot(train, aes(x= multiple.offenses, fill = violator)) +
+  geom_bar() +
+  theme_bw()
+```
+
+In this graph we see that those who had multiple offenses had a higher chance of violating their parole.
+
+
+```{r}
+ggplot(train, aes(x= male, fill = violator)) +
+  geom_bar() +
+  theme_bw()
+
+t1 <- table(train$violator, train$male)
+prop.table(t1, margin = 2)
+```
+
+In this graph we see that males had a higher chance of violating parole, however there was a lot more male subjects then there were females.  I made a table to see what the percentage of males and females who violated parole.  As we can see females had about 13.27 % of violating their parole, and males had 11.20% chance of violating parole.
+
+```{r}
+ggplot(train, aes(x= race, fill = violator)) +
+  geom_bar() +
+  theme_bw()
+
+t2 <- table(train$violator, train$race)
+prop.table(t2, margin = 2)
+```
+
+In this graph we see how the race variable affected parole violation.  Seeing from the graph there were more parolees who violated parole that were not white.  We see this also in the table that other race had a 14.85% while white had 9.23%.
+
+
+```{r}
+ggplot(train, aes(x= crime, fill = violator)) +
+  geom_bar() +
+  theme_bw()
+
+t3 <- table(train$violator, train$crime)
+prop.table(t3, margin = 2)
+```
+
+From this graph we see the type of crime variable affects on parole violation.  We see there was a higher chance of violation in the other bar, however this was almost double or triple amount of other crime compared to larceny, drug-related, and driving-related. I made a table to see the information better.  We see that those who had drug-related crime had a higher chance of violating parole.
+
+```{r}
+ggplot(train, aes(x= state, fill = violator)) +
+  geom_bar() +
+  theme_bw()
+
+t4 <- table(train$violator, train$state)
+prop.table(t4, margin = 2)
+
+
+```
+
+This graph compares which state had an effect to violating parole.  We see that Virigina had the most parolees, and Louisiana almost had half of their parolees violate parole.  Once again I made a graph and swa that Louisiana had 41.38% violate parole, and Virginia had the least with 2.11%.
+
+```{r}
+ggplot(train, aes(x= violator, y= age)) +
+  geom_boxplot()+
+  theme_bw()
+```
+
+This graph sees how age variable affected parole violations.  It seems that the average age of those who violated parole was older than those who did not violate parole.  However, those who did not violate parole had a greater range.
+
+```{r}
+ggplot(train, aes(x= violator, y= time.served)) +
+  geom_boxplot()+
+  theme_bw()
+```
+
+This graph shows that the average time served was lower for those who violated parole while those who did not violate parole had a longer time served.
+
+```{r}
+ggplot(train, aes(x= violator, y= max.sentence)) +
+  geom_boxplot()+
+  theme_bw()
+```
+
+Finally, this is the last graph I did to see the the effects of variables on the violator variable.  This graph shows almost the same trend that the previous graph did (violator variable vs. time served variable).  Those who did not violate parole average max sentence was longer than those who violated parole.  This graph does not show much information because both have a wide range.
+
+
+### Task 3
+```{r}
+mod1 = glm(violator ~ multiple.offenses, train, family = "binomial")
+summary(mod1)
+```
+
+I chose mutlipe.offenses because it had the greater predictative ability of the violator variable.  The AIC of this model is 339.02 which is seems small, but it seems a big large for a varialbe if it was the best predictor of violator variable.  This means that there are more variables that affect the violator variable.
+
+
+### Task 4
+```{r}
+allmod = glm(violator ~., train, family = "binomial")
+summary(allmod)
+
+emptymod = glm(violator ~1, train, family = "binomial")
+summary(emptymod)
+```
+
+```{r Forward Stepwise}
+forwardmod = stepAIC(emptymod, direction = "forward", scope = list( upper = allmod, lower = emptymod), trace = TRUE)
+summary(forwardmod)
+```
+
+Backward stepwise
+```{r}
+backmod = stepAIC(allmod, direction = "backward", trace = TRUE)
+summary(backmod)
+```
+
+After completing the forward stepwise and backward stepwise regressions we see that they give the same answers.  Both stepwise regressions show that race, state, and multiple.offenses had an effect on the violator variable.  The forward stepwise regression started with an AIC value of 342.04, and ended with an AIC value of 258.98.  This is a difference of 80.04 from just multiple.offenses variable model.  This means that having those three variables we have the smallest AIC value we can get with this data.
+
+
+
+### Task 5
+```{r}
+logmod = glm(violator ~ race + state + multiple.offenses, train, family = "binomial")
+summary(logmod)
+```
+
+After making the logistic regression model with the race, state, and multiple.offenses variables we see that multiple.offenses(yes) and state(Virgina) were the significant variables.  Also race(other) was significant, but not as significant as the multiple.offenses and state variables.  The states Kentucky and Louisiana were not significant in this model.    
+
+
+### Task 6
+```{r}
+parolee1 <- data.frame(state = "Louisiana", race = "white", multiple.offenses = "Yes")
+
+parolee2 <- data.frame(state = "Kentucky", race = "Other", multiple.offenses = "No")
+
+
+predicts <- predict(logmod, parolee1, type = "response") 
+predicts2 <- predict(logmod, parolee2, type = "response")
+
+table(predicts)
+table(predicts2)
+
+```
+
+For the first parolee has about a 33.80% of violating parole, and the second parolee has about a 20.70% of violating parole. 
+
+### Task 7
+```{r}
+pred <- predict(logmod, train, type = "response")
+head(pred)
+
+ROCRpred <- prediction(pred, train$violator)
+ROCRpref <- performance(ROCRpred, "tpr", "fpr")
+plot(ROCRpref, colorize = TRUE, print.cutoffs.at=seq(0,1,by=0.1), text.adj=c(-0.2,1.7))
+
+```
+
+### Task 8
+Area under the curve/Specificity and Sensitivity
+```{r}
+#Area under curve
+as.numeric(performance(ROCRpred, "auc")@y.values)
+
+opt.cut = function(perf,pred){
+  cut.ind = mapply(FUN=function(x, y, p){
+    d = (x-0)^2 + (y-1)^2
+    ind = which(d == min(d))
+    c(sensitivity = y[[ind]], specificity = 1 -x[[ind]],
+      cutoff = p[[ind]])
+  }, perf@x.values, perf@y.values, pred@cutoffs)
+}
+print(opt.cut(ROCRpref, ROCRpred))
+
+```
+
+
+Accuracy
+```{r}
+t5 = table(train$violator, pred > 0.2069629)
+t5
+#caluculating accuracy
+(t5[1,1]+t5[2,2])/nrow(train)
+```
+
+The accuracy of this ROC curve is about 84.36%.  The sensitivity is 0.7273 and the specificity is 0.8589.  As we we can see in the table we incorrectly classified 74 parolees with this threshold of 0.2069629.
+
+### Task 9 and Task 10
+```{r}
+#Applying trial and error to maximize accuracy 
+
+#(trying 0.3 as threshold)
+t6 = table(train$violator, pred > 0.3)
+t6
+(t6[1,1]+t6[2,2])/nrow(train)
+
+#(trying 0.2 as threshold)
+t7 = table(train$violator, pred >0.4)
+t7
+(t7[1,1]+t7[2,2])/nrow(train)
+
+#(trying 0.4 as threshold)
+t8 = table(train$violator, pred > 0.5)
+t8
+(t8[1,1]+t8[2,2])/nrow(train)
+
+#(trying 0.6)
+t9 = table(train$violator, pred > 0.6)
+t9
+(t9[1,1]+t9[2,2])/nrow(train)
+```
+
+The threshold that best maximizes the accuracy of the training set it 0.5 because it gives us an accuracry of 0.8964.  The threshold of 0.4 also gives us that value of accuracy, but it is not the maximum threshold we can have.  As you can see though if we increase our threshold to 0.6 the accuracry of the training set starts to decrease.  With an accuracy of 89.64% we can safely predict those who will violate parolee and those who do not with our model with a low chance of predicting wrong.
+
+
+

@@ -1,0 +1,120 @@
+---
+output:
+  word_document: default
+  html_document: default
+---
+# Model Validation
+## May 25, 2020
+### Stephen Kiser
+
+Libraries
+```{r}
+library(tidyverse)
+library(MASS)
+library(caret)
+```
+
+Read-in Dataset
+```{r}
+bike <- read_csv("hour.csv")
+```
+
+Convert variables
+```{r}
+bike <- bike %>% mutate(season = as_factor(as.character(season))) %>% 
+  mutate(season = fct_recode(season,
+      "Spring" = "1",
+      "Summer" = "2",
+      "Fall" = "3",
+      "Winter" = "4"))
+
+bike <- bike %>% mutate(yr = as_factor(yr), mnth = as_factor(mnth), hr = as_factor(hr))
+
+bike <- bike %>% mutate(holiday = as_factor(as.character(holiday))) %>%
+  mutate(holiday = fct_recode(holiday, 
+    "NotHoliday" = "0",
+    "Holiday" = "1"))
+
+bike <- bike %>% mutate(workingday = as_factor(as.character(workingday))) %>%
+  mutate(workingday = fct_recode(workingday,
+    "NotWorkingDay" = "0",
+    "WorkingDay" = "1"))
+
+bike <- bike %>% mutate(weathersit = as_factor(as.character(weathersit))) %>%
+  mutate(weathersit = fct_recode(weathersit, 
+    "No Precip" = "1",
+    "Misty" = "2",
+    "LightPrecip" = "3",
+    "HeavyPrecip" = "4"))
+
+bike <- bike %>% mutate(weekday = as_factor(as.character(weekday))) %>%
+  mutate(weekday = fct_recode(weekday,
+    "Sunday" = "0",
+    "Monday" = "1",
+    "Tuesday" = "2",
+    "Wednesday"= "3",
+    "Thursday" = "4",
+    "Friday" = "5",
+    "Saturday" = "6"))
+
+glimpse(bike)
+```
+
+### Task 1
+```{r}
+set.seed(1234)
+
+train.rows = createDataPartition(y=bike$count, p=0.7, list = FALSE)
+
+train = slice(bike, train.rows)
+test = slice(bike, -train.rows)
+```
+
+### Task 2
+The number of rows in the training set is 12167 observations, and in the test set there is 5212 observations.
+
+### Task 3
+```{r}
+mod1 = lm(count ~ season + mnth + hr + holiday + weekday + temp + weathersit, train)
+summary(mod1)
+```
+
+The adjusted R-squared value is 0.6202.  This R-squared value is high, but the closer we can get to 1 the better the model would fit.  This linear regression has several months and weekdays that are not significant to the count of bike rentals.  We see that weathersit, tep, holiday, hr, season are significant variables in the effect of bike rentals.
+
+
+### Task 4 
+```{r}
+predict_train <- predict(mod1, newdata = train)
+head(predict_train)
+summary(predict_train)
+hist(predict_train)
+
+
+```
+
+The predictions are negative for the first 5 rows.  This must mean that the variables had a negative effect on the chance of renting a bike.  As we can see in the histogram our predictions go from -200 to 600 as values.  We have the majority of our bike rentals in the training set 50 to 350 of our bell curve. The distribution of predictions seems reasonable for this data. 
+
+
+### Task 5
+```{r}
+predict_test <- predict(mod1, newdata = test)
+head(predict_test)
+summary(predict_test)
+hist(predict_test)
+
+```
+
+As we can see in our head function the top 6 predictions of our data set, test.  The testing set compared to our training set shows off higher predicted values of bike rentals.  However, our values for median and mean are about the same.  There is only a 0.08 difference in the mean values.  When we look at the histogram the majority of our bell curve is around the 50 to 350 bike rentals.  The distribution for these predictions is reasonable. 
+
+
+### Task 6
+```{r}
+SSE = sum((test$count - predict_test)^2)
+SST = sum((test$count - mean(test$count))^2)
+1 - SSE/SST
+```
+
+This value is very close to the R-squared value that our training set model gives us.  Our model gives us 0.6217 as the R-squared value in the training set. 
+
+### Task 7
+K-fold cross validation is different from training/testing splits because it has k-amount of models that it takes data from.  The typical k-values are 3,5,and 10.  It gathers the data for the training set by grabbing the first 4 partitions of the first model and then the last partition for the testing set.  Then for the second model it grabs the first 3 and last partition for the training set then adds the the 4th partition to the testing set.  It keeps doing this until we reach the k-amount of folds.  The testing/training split takes 70-80% of the data for the training set then the last 20-30% for the testing set.
