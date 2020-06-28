@@ -1,0 +1,225 @@
+---
+output:
+  word_document: default
+  html_document: default
+---
+# Module 5
+## BAN 502
+### Stephen Kiser
+
+```{r libraries}
+library(tidyverse)
+library(caret)
+library(nnet)
+library(rpart)
+library(ranger)
+library(caretEnsemble)
+library(xgboost)
+```
+
+```{r reading in data}
+fin <- read_csv("2018Fin.csv")
+
+#str(fin)
+#summary(fin)
+```
+
+```{r making it better}
+fin <- fin %>% select(c(Class, `Revenue Growth`, `EPS Diluted`, `EBITDA Margin`, priceBookValueRatio, debtEquityRatio, debtRatio, `PE ratio`, Sector, `Revenue Growth`, returnOnAssets, returnOnEquity, returnOnCapitalEmployed, quickRatio))
+
+
+fin <- fin %>% mutate(Class = as.factor(Class)) %>% mutate(Class = fct_recode(Class, 
+          "No" = "0",
+          "Yes" = "1"
+          ))
+fin <- fin %>% mutate(Sector = as.factor(Sector))
+
+fin <- fin %>% drop_na()
+
+str(fin)
+summary(fin)
+```
+
+```{r changing variables}
+fin = fin %>% filter(`Revenue Growth` <= 1) 
+fin = fin %>% filter(`EPS Diluted` >= -10, `EPS Diluted` <= 10) 
+fin = fin %>% filter(`EBITDA Margin` >= -5, `EBITDA Margin` <= 5)
+fin = fin %>% filter(priceBookValueRatio >= 0, priceBookValueRatio <= 5) 
+fin = fin %>% filter(debtEquityRatio >= -1, debtEquityRatio <= 2)
+fin = fin %>% filter(debtRatio <= 1) 
+fin = fin %>% filter(`PE ratio` <= 100) 
+fin = fin %>% filter(returnOnAssets >= -5, returnOnAssets <= 5)
+fin = fin %>% filter(returnOnEquity >= -5, returnOnEquity <= 5)
+fin = fin %>% filter(returnOnCapitalEmployed >= -2, returnOnCapitalEmployed <= 2) 
+fin = fin %>% filter(quickRatio <= 20)
+
+```
+
+### Task 1
+```{r test/train sets}
+set.seed(12345)
+train.rows <- createDataPartition(y=fin$Class, p=0.7, list = FALSE)
+
+train <- dplyr::slice(fin, train.rows)
+test <- dplyr::slice(fin, -train.rows)
+
+```
+
+### Task 2
+```{r task 2}
+fitControl <- trainControl(method = "cv", number = 10)
+
+
+
+nnetGrid =  expand.grid(size = 1:12,
+                        decay = c(0.5, 0.1, 1e-2, 1e-3, 1e-4, 1e-5, 1e-6, 1e-7))
+
+set.seed(1234)
+nnetBasic <- train(x=as.data.frame(fin[-1]), y = fin$Class,
+                   method = "nnet",
+                   trControl = fitControl,
+                   tuneGrid = nnetGrid,
+                   trace = FALSE
+                   )
+```
+
+```{r neural network}
+nnetBasic
+```
+### Task 3
+```{r confusiont matrix}
+predNet <- predict(nnetBasic, train)
+
+confusionMatrix(predNet, train$Class, positive = "Yes")
+```
+
+The model's accuracy is 68.68% which is not bad, but it has room for improvement.  The reason for this accuracy is because of all the data we removed.  The specificity is 0.3546 which is means there are a lot of false positive results.  The sensitivity is 0.8632 which is a better number in our prediction than 0.3546.
+
+### Task 4
+```{r test confusion matrix}
+predNet.test <- predict(nnetBasic, test)
+
+confusionMatrix(predNet.test, test$Class, positive = "Yes")
+```
+
+The testing set has a better accuracy than our training set.  This is because there is less data which means outliers can have a bigger impact to our numbers.  Sensitivity is 0.9038 and specificity is 0.4026.  Even though specificity increased it means our model is will have more errors for negative results.
+
+### Task 5 
+
+```{r task 5}
+control <- trainControl(method = "cv", number = 5, 
+                        savePredictions = "final",
+                        classProbs = TRUE, 
+                        summaryFunction = twoClassSummary, 
+                        index = createResample(train$Class))
+
+set.seed(111)
+model_list <- caretList(x=as.data.frame(train[,-1]), y = train$Class,
+                        metric = "ROC",
+                        trControl = control,
+                        methodList = c("glm", "rpart"),
+                        tuneList=list( 
+                          ranger = caretModelSpec(method="ranger", max.depth = 5, tuneGrid = expand.grid(mtry = 1:12, 
+                                                                                                         splitrule = c("gini","extratrees","hellinger"), 
+                                                                                                         min.node.size=1:5)), 
+                          nn = caretModelSpec(method="nnet", 
+                                              tuneGrid = 
+                                                expand.grid(size = 1:23, 
+                                                            decay = c(0.5, 0.1, 1e-2, 1e-3, 1e-4, 1e-5, 1e-6, 1e-7)),trace=FALSE)))
+```
+
+### Task 6
+
+```{r task 6}
+modelCor(resamples(model_list))
+```
+
+The correlation in our models in the ensemble are best glm and nn with 0.9423411.  There is no good correlation with rpart in this ensemble. 
+
+### Task 7
+```{r task 7}
+ensemble <- caretEnsemble(
+  model_list,
+  metric = "ROC",
+  trControl = control
+)
+
+
+pred_ensemble  = predict(ensemble, train, type = "raw")
+confusionMatrix(pred_ensemble, train$Class)
+
+pred_ensemble_test = predict(ensemble, test, type = "raw")
+confusionMatrix(pred_ensemble_test, test$Class)
+```
+
+The model has a 70.41% accuracy on the training set and a 70.56% on the testing set.  The sensitivity of the training set is 0.3352 and in the testing set it is 0.3442.  The specificity of the training set is 0.900 and in the testing set it is 0.8969.  We got an increase in the accuracy and specificity, but a decrease in sensitivity for both sets.  This means that both sets will have more errors in the true positives.  
+
+### Task 8 
+```{r task 8}
+control2 <- trainControl(method = "cv", number = 10, 
+                        savePredictions = "final",
+                        classProbs = TRUE, 
+                        summaryFunction = twoClassSummary, 
+                        index = createResample(train$Class))
+
+stack = caretStack(
+  model_list,
+  method = "glm",
+  metric = "ROC",
+  trControl = control2
+  )
+
+print(stack)
+summary(stack)
+```
+
+### Task 9 
+```{r task 9 dummy}
+train_dummy = dummyVars(" ~ .", data = train)
+
+train_xgb = data.frame(predict(train_dummy, newdata = train))
+
+
+test_dummy = dummyVars(" ~ .", data = test)
+test_xgb = data.frame(predict(test_dummy, newdata = test))
+
+
+train_xgb <- train_xgb %>% dplyr::select(-Class.No)
+
+test_xgb <- test_xgb %>% dplyr::select(-Class.No)
+
+str(train_xgb)
+str(test_xgb)
+```
+
+```{r task 9 models}
+set.seed(999)
+
+ctrl <- trainControl(method = "cv", number = 5)
+
+tgrid <- expand.grid(
+  nrounds = 100,
+  max_depth = c(1,2,3,4),
+  eta = c(0.01, 0.1, 0.2, 0.3),
+  gamma = 0,
+  colsample_bytree = c(0.6, 0.8, 1),
+  min_child_weight = 1,
+  subsample = c(0.8, 1)
+)
+
+fitxgb <- train(as.factor(Class.Yes)~.,
+  data= train_xgb,
+  method = "xgbTree",
+  tuneGrid = tgrid,
+  trControl = ctrl)
+```
+
+```{r task 9 confusion matrices}
+predxgbtrain <- predict(fitxgb, train_xgb)
+confusionMatrix(as.factor(train_xgb$Class.Yes),predxgbtrain, positive = "1")
+
+predxgbtest = predict(fitxgb, test_xgb)
+confusionMatrix(as.factor(test_xgb$Class.Yes), predxgbtest, positive = "1")
+```
+
+In the training set our accuracy is now 70.22% and in the testing set it is 69.66%. Now our sensitivity for the trianing set is 0.7141, and 0.7143 in the testing set.  The specificity is 0.6441 in the training set and 0.6173 in the testing set.  This model has decreased the specifity from the prevous model, but has increased our sensitivity for both.  Making the models have a better all around predictions instead of what previous models had.
